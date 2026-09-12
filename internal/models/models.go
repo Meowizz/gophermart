@@ -11,7 +11,7 @@ type User struct {
 }
 
 type Order struct {
-	ID         int
+	Number     int
 	UserID     int
 	Status     string
 	Accrual    float64

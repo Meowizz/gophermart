@@ -48,10 +48,10 @@ func (s *Store) CreateUser(ctx context.Context, login, passwordHash string) (*mo
 }
 
 func (s *Store) GetOrderByNumber(ctx context.Context, orderNumber string) (*models.Order, error) {
-	query := `SELECT  FROM orders WHERE order_number = $1`
+	query := `SELECT * FROM orders WHERE number = $1`
 	var order models.Order
 
-	err := s.db.QueryRow(ctx, query, orderNumber).Scan(&order.ID, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt)
+	err := s.db.QueryRow(ctx, query, orderNumber).Scan(&order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errors.New("order not found")
@@ -63,7 +63,7 @@ func (s *Store) GetOrderByNumber(ctx context.Context, orderNumber string) (*mode
 }
 
 func (s *Store) CreateOrder(ctx context.Context, userID int, orderNumber string) error {
-	query := `INSERT INTO orders (user_id, order_number, status) VALUES ($1, $2, 'NEW')`
+	query := `INSERT INTO orders (user_id, number,status) VALUES ($1, $2, 'NEW')`
 
 	_, err := s.db.Exec(ctx, query, userID, orderNumber)
 	if err != nil {
@@ -86,7 +86,7 @@ func (s *Store) GetOrderByUserID(ctx context.Context, userID int) ([]models.Orde
 
 	for rows.Next() {
 		var order models.Order
-		if err := rows.Scan(&order.ID, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt); err != nil {
+		if err := rows.Scan(&order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt); err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
 		orders = append(orders, order)

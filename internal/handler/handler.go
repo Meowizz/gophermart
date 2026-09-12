@@ -172,10 +172,6 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 		http.Error(rw, "Failed to get user", http.StatusInternalServerError)
 		return
 	}
-	if user == nil {
-		http.Error(rw, "User not found", http.StatusUnauthorized)
-		return
-	}
 
 	// Read the request body
 	body, err := io.ReadAll(rq.Body)
@@ -191,8 +187,8 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	_, err = luhn.IsValid(orderNumber)
-	if err != nil {
+	isValid, err := luhn.IsValid(orderNumber)
+	if err != nil || !isValid {
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
 	}

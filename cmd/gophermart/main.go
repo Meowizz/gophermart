@@ -12,6 +12,7 @@ import (
 	"github.com/Meowizz/gophermart/internal/config"
 	"github.com/Meowizz/gophermart/internal/database"
 	"github.com/Meowizz/gophermart/internal/handler"
+	"github.com/Meowizz/gophermart/internal/middleware"
 )
 
 func main() {
@@ -29,8 +30,11 @@ func main() {
 
 	http.HandleFunc("/api/user/register", h.RegisterHandler)
 	http.HandleFunc("/api/user/login", h.LoginHandler)
-	//TODO: http.HandleFunc("/api/user/orders",middleware.AuthTokenMiddleware(ProtectedHandlerFunc))
-
+	http.Handle("/api/user/orders",
+		middleware.AuthTokenMiddleware([]byte(cfg.JWTSecret))(
+			http.HandlerFunc(h.CreateOrder),
+		),
+	)
 	srv := &http.Server{
 		Addr:         cfg.ServerPort,
 		ReadTimeout:  10 * time.Second,

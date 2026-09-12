@@ -3,6 +3,7 @@ module github.com/Meowizz/gophermart
 go 1.26.0
 
 require (
+	github.com/EClaesson/go-luhn v0.0.0-20210207103312-b1c12d658b70
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1
@@ -10,7 +11,6 @@ require (
 )
 
 require (
-	github.com/EClaesson/go-luhn v0.0.0-20210207103312-b1c12d658b70 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
