@@ -3,10 +3,14 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	luhn "github.com/EClaesson/go-luhn"
+
+	"github.com/Meowizz/gophermart/internal/middleware"
 	"github.com/Meowizz/gophermart/internal/repository"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -20,7 +24,7 @@ type Handler struct {
 func NewHandler(store *repository.Store, jwtSecret []byte) *Handler {
 	return &Handler{
 		store:     store,
-		jwtSecret: jwtSecret,
+		jwtSecret: []byte(jwtSecret),
 	}
 }
 
@@ -118,4 +122,97 @@ func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
 	}
 	rw.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(rw).Encode(map[string]string{"access_token": token})
+}
+
+/*
+* #### **Загрузка номера заказа**
+
+Хендлер: `POST /api/user/orders`.
+
+Хендлер доступен только аутентифицированным пользователям. Номером заказа является последовательность цифр произвольной длины.
+
+Номер заказа может быть проверен на корректность ввода с помощью [алгоритма Луна](https://ru.wikipedia.org/wiki/Алгоритм_Луна){target="_blank"}.
+
+Формат запроса:
+
+```
+POST /api/user/orders HTTP/1.1
+Content-Type: text/plain
+...
+
+12345678903
+```
+
+Возможные коды ответа:
+
+- `200` — номер заказа уже был загружен этим пользователем;
+- `202` — новый номер заказа принят в обработку;
+- `400` — неверный формат запроса;
+- `401` — пользователь не аутентифицирован;
+- `409` — номер заказа уже был загружен другим пользователем;
+- `422` — неверный формат номера заказа;
+- `500` — внутренняя ошибка сервера.
+*/
+func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
+
+	// Check that the request method is POST and the content type is text/plain
+	if rq.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userLogin, ok := middleware.GetUserLogin(rq)
+	if !ok {
+		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
+	if err != nil {
+		http.Error(rw, "Failed to get user", http.StatusInternalServerError)
+		return
+	}
+	if user == nil {
+		http.Error(rw, "User not found", http.StatusUnauthorized)
+		return
+	}
+
+	// Read the request body
+	body, err := io.ReadAll(rq.Body)
+	if err != nil {
+		http.Error(rw, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer rq.Body.Close()
+
+	orderNumber := strings.TrimSpace(string(body))
+	if orderNumber == "" {
+		http.Error(rw, "Order number is empty", http.StatusBadRequest)
+		return
+	}
+
+	_, err = luhn.IsValid(orderNumber)
+	if err != nil {
+		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
+		return
+	}
+
+	existingOrder, err := h.store.GetOrderByNumber(rq.Context(), orderNumber)
+	if err == nil {
+		if existingOrder.UserID == user.ID {
+			rw.WriteHeader(http.StatusOK)
+			return
+		} else {
+			http.Error(rw, "Order already uploaded by another user", http.StatusConflict)
+			return
+		}
+	}
+
+	err = h.store.CreateOrder(rq.Context(), user.ID, orderNumber)
+	if err != nil {
+		http.Error(rw, "Failed to create order", http.StatusInternalServerError)
+		return
+	}
+
+	rw.WriteHeader(http.StatusAccepted)
 }
