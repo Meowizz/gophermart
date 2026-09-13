@@ -32,7 +32,7 @@ func main() {
 	http.HandleFunc("/api/user/login", h.LoginHandler)
 	http.Handle("/api/user/orders",
 		middleware.AuthTokenMiddleware([]byte(cfg.JWTSecret))(
-			http.HandlerFunc(h.CreateOrder),
+			http.HandlerFunc(h.OrdersHandler),
 		),
 	)
 	srv := &http.Server{

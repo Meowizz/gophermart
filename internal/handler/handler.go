@@ -10,6 +10,7 @@ import (
 
 	luhn "github.com/EClaesson/go-luhn"
 
+	"github.com/Meowizz/gophermart/internal/converter"
 	"github.com/Meowizz/gophermart/internal/middleware"
 	"github.com/Meowizz/gophermart/internal/repository"
 	"github.com/golang-jwt/jwt/v5"
@@ -121,38 +122,9 @@ func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"access_token": token})
+	json.NewEncoder(rw).Encode(map[string]string{"token": token})
 }
 
-/*
-* #### **Загрузка номера заказа**
-
-Хендлер: `POST /api/user/orders`.
-
-Хендлер доступен только аутентифицированным пользователям. Номером заказа является последовательность цифр произвольной длины.
-
-Номер заказа может быть проверен на корректность ввода с помощью [алгоритма Луна](https://ru.wikipedia.org/wiki/Алгоритм_Луна){target="_blank"}.
-
-Формат запроса:
-
-```
-POST /api/user/orders HTTP/1.1
-Content-Type: text/plain
-...
-
-12345678903
-```
-
-Возможные коды ответа:
-
-- `200` — номер заказа уже был загружен этим пользователем;
-- `202` — новый номер заказа принят в обработку;
-- `400` — неверный формат запроса;
-- `401` — пользователь не аутентифицирован;
-- `409` — номер заказа уже был загружен другим пользователем;
-- `422` — неверный формат номера заказа;
-- `500` — внутренняя ошибка сервера.
-*/
 func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 
 	// Check that the request method is POST and the content type is text/plain
@@ -211,4 +183,55 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 	}
 
 	rw.WriteHeader(http.StatusAccepted)
+}
+
+func (h *Handler) GetOrders(rw http.ResponseWriter, rq *http.Request) {
+	if rq.Method != http.MethodGet {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userLogin, ok := middleware.GetUserLogin(rq)
+	if !ok {
+		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
+	if err != nil {
+		http.Error(rw, "Failed to get user", http.StatusInternalServerError)
+		return
+	}
+
+	orders, err := h.store.GetOrderByUserID(rq.Context(), user.ID)
+	if err != nil {
+		http.Error(rw, "Failed to get order", http.StatusInternalServerError)
+		return
+	}
+
+	if len(orders) == 0 {
+		rw.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	response := converter.ConvertOrdersToResponse(orders)
+	rw.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) OrdersHandler(rw http.ResponseWriter, rq *http.Request) {
+	switch rq.Method {
+	case http.MethodGet:
+		h.GetOrders(rw, rq)
+		return
+	case http.MethodPost:
+		h.CreateOrder(rw, rq)
+		return
+	default:
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 }
