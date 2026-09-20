@@ -37,6 +37,9 @@ func main() {
 	mux.Handle("POST /api/user/orders", authMW(http.HandlerFunc(h.CreateOrder)))
 	mux.Handle("GET /api/user/orders", authMW(http.HandlerFunc(h.GetOrders)))
 
+	mux.Handle("GET /api/user/balance", authMW(http.HandlerFunc(h.GetBalance)))
+	mux.Handle("POST /api/user/balance/withdraw", authMW(http.HandlerFunc(h.WithdrawBalance)))
+	mux.Handle("GET /api/user/withdrawals", authMW(http.HandlerFunc(h.GetWithdrawals)))
 	srv := &http.Server{
 		Addr:         cfg.RunAddr,
 		Handler:      mux,
