@@ -21,30 +21,34 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := database.InitDB(context.Background()); err != nil {
+	if err := database.InitDB(context.Background(), cfg.DatabaseURI); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
 
+	mux := http.NewServeMux()
 	h := handler.NewHandler(database.GetStore(), []byte(cfg.JWTSecret))
 
-	http.HandleFunc("/api/user/register", h.RegisterHandler)
-	http.HandleFunc("/api/user/login", h.LoginHandler)
-	http.Handle("/api/user/orders",
-		middleware.AuthTokenMiddleware([]byte(cfg.JWTSecret))(
-			http.HandlerFunc(h.OrdersHandler),
-		),
-	)
+	mux.HandleFunc("POST /api/user/register", h.RegisterHandler)
+	mux.HandleFunc("POST /api/user/login", h.LoginHandler)
+
+	authMW := middleware.AuthTokenMiddleware([]byte(cfg.JWTSecret))
+
+	mux.Handle("POST /api/user/orders", authMW(http.HandlerFunc(h.CreateOrder)))
+	mux.Handle("GET /api/user/orders", authMW(http.HandlerFunc(h.GetOrders)))
+
 	srv := &http.Server{
-		Addr:         cfg.ServerPort,
+		Addr:         cfg.RunAddr,
+		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	go func() {
-		log.Printf("Server is running on port %s", cfg.ServerPort)
-		if err := srv.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+		log.Printf("Server is running on port %s", cfg.RunAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Failed to start server: %v", err)
 		}
 	}()
 
@@ -56,7 +60,7 @@ func main() {
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Failed to shutdown server: %v", err)
+		log.Printf("Failed to shutdown server: %v", err)
 	}
 	log.Println("Server stopped")
 }

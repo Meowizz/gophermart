@@ -45,10 +45,6 @@ func (h *Handler) generateToken(login string) (string, error) {
 
 // Auth Handler for register new users
 func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
-	if rq.Method != http.MethodPost {
-		http.Error(rw, "Method should be POST", http.StatusMethodNotAllowed)
-		return
-	}
 	var req struct {
 		LoginUser string `json:"login"`
 		Password  string `json:"password"`
@@ -92,11 +88,6 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 
 // Login handler for existing users
 func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
-	if rq.Method != http.MethodPost {
-		http.Error(rw, "Method should be POST", http.StatusMethodNotAllowed)
-		return
-	}
-
 	var req struct {
 		LoginUser string `json:"login"`
 		Password  string `json:"password"`
@@ -126,12 +117,6 @@ func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
 }
 
 func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
-
-	// Check that the request method is POST and the content type is text/plain
-	if rq.Method != http.MethodPost {
-		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 
 	userLogin, ok := middleware.GetUserLogin(rq)
 	if !ok {
@@ -186,11 +171,6 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 }
 
 func (h *Handler) GetOrders(rw http.ResponseWriter, rq *http.Request) {
-	if rq.Method != http.MethodGet {
-		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	userLogin, ok := middleware.GetUserLogin(rq)
 	if !ok {
 		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
@@ -218,20 +198,6 @@ func (h *Handler) GetOrders(rw http.ResponseWriter, rq *http.Request) {
 	rw.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(rw).Encode(response); err != nil {
 		http.Error(rw, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
-}
-
-func (h *Handler) OrdersHandler(rw http.ResponseWriter, rq *http.Request) {
-	switch rq.Method {
-	case http.MethodGet:
-		h.GetOrders(rw, rq)
-		return
-	case http.MethodPost:
-		h.CreateOrder(rw, rq)
-		return
-	default:
-		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 }
