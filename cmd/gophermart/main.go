@@ -21,7 +21,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := database.InitDB(context.Background(), cfg.DatabaseURI); err != nil {
+	if err := database.InitDB(ctx, cfg.DatabaseURI); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
@@ -60,7 +60,7 @@ func main() {
 	<-quit
 	log.Println("Shutting down...")
 
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("Failed to shutdown server: %v", err)

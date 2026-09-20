@@ -26,12 +26,12 @@ func InitDB(ctx context.Context, dsn string) error {
 
 	dbPool, err = pgxpool.New(ctx, dsn)
 	if err != nil {
-		return fmt.Errorf("Unable to connect to the Database: %w", err)
+		return fmt.Errorf("unable to connect to the Database: %w", err)
 	}
 
 	if err := dbPool.Ping(ctx); err != nil {
 		dbPool.Close()
-		return fmt.Errorf("%v\n Unable To PING DB: %w", err)
+		return fmt.Errorf("unable To PING DB: %w", err)
 	}
 
 	Store = repository.NewStore(dbPool)
