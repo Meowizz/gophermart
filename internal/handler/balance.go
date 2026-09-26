@@ -13,8 +13,8 @@ import (
 )
 
 type BalanceResponse struct {
-	Current   decimal.Decimal `json:"current"`
-	Withdrawn decimal.Decimal `json:"withdrawn"`
+	Current   float64 `json:"current"`
+	Withdrawn float64 `json:"withdrawn"`
 }
 
 type WithdrawalRequest struct {
@@ -23,9 +23,9 @@ type WithdrawalRequest struct {
 }
 
 type WithdrawalResponse struct {
-	Order       string          `json:"order"`
-	Sum         decimal.Decimal `json:"sum"`
-	ProcessedAt string          `json:"processed_at"`
+	Order       string  `json:"order"`
+	Sum         float64 `json:"sum"`
+	ProcessedAt string  `json:"processed_at"`
 }
 
 func (h *Handler) GetBalance(rw http.ResponseWriter, rq *http.Request) {
@@ -46,9 +46,12 @@ func (h *Handler) GetBalance(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
+	current, _ := balance.Current.Float64()
+	withdrawn, _ := balance.Withdrawn.Float64()
+
 	resp := BalanceResponse{
-		Current:   balance.Current,
-		Withdrawn: balance.Withdrawn,
+		Current:   current,
+		Withdrawn: withdrawn,
 	}
 	rw.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(rw).Encode(resp)
@@ -82,6 +85,11 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 	order, err := h.store.GetOrderByNumber(rq.Context(), req.Order)
 	if err != nil || order.UserID != user.ID {
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
+		return
+	}
+
+	if order.Status != "PROCESSED" {
+		http.Error(rw, "order is not processed yet", http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -121,9 +129,10 @@ func (h *Handler) GetWithdrawals(rw http.ResponseWriter, rq *http.Request) {
 
 	resp := make([]WithdrawalResponse, len(withdrawals))
 	for i, w := range withdrawals {
+		sum, _ := w.Sum.Float64()
 		resp[i] = WithdrawalResponse{
 			Order:       w.OrderNumber,
-			Sum:         w.Sum,
+			Sum:         sum,
 			ProcessedAt: w.ProcessedAt.Format(time.RFC3339),
 		}
 	}
