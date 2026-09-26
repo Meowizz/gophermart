@@ -91,7 +91,7 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"token": token})
+	json.NewEncoder(rw).Encode(map[string]string{"access_token": token})
 }
 
 // Login handler for existing users
@@ -121,7 +121,7 @@ func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"token": token})
+	json.NewEncoder(rw).Encode(map[string]string{"access_token": token})
 }
 
 func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
