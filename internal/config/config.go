@@ -18,48 +18,34 @@ type Config struct {
 func LoadConfig() *Config {
 	_ = godotenv.Load()
 
-	cfg := &Config{}
+	cfg := &Config{
+		RunAddr:           ":8080",
+		DatabaseURI:       "postgres://postgres:postgres@localhost:5432/gophermart?sslmode=disable",
+		AccrualSystemAddr: "http://localhost:8081",
+		JWTSecret:         "default_insecure_secret_for_local_and_ci_testing",
+	}
 
-	flag.StringVar(&cfg.RunAddr, "a", ":8080", "address and port to run server")
-	flag.StringVar(&cfg.DatabaseURI, "d", "", "database connection string (required)")
-	flag.StringVar(&cfg.AccrualSystemAddr, "r", "http://localhost:8081", "address of accrual system")
-	flag.StringVar(&cfg.JWTSecret, "jwt-secret", "", "JWT secret key (required)")
-
-	setDefaultsFromEnv(cfg)
+	flag.StringVar(&cfg.RunAddr, "a", cfg.RunAddr, "address and port to run server")
+	flag.StringVar(&cfg.DatabaseURI, "d", cfg.DatabaseURI, "database connection string")
+	flag.StringVar(&cfg.AccrualSystemAddr, "r", cfg.AccrualSystemAddr, "address of accrual system")
+	flag.StringVar(&cfg.JWTSecret, "jwt-secret", cfg.JWTSecret, "JWT secret key")
 
 	flag.Parse()
 
-	if cfg.DatabaseURI == "" {
-		log.Fatal("DATABASE_URI is required (use -d flag or DATABASE_URI env)")
+	if envAddr := os.Getenv("RUN_ADDR"); envAddr != "" {
+		cfg.RunAddr = envAddr
 	}
-	if cfg.JWTSecret == "" {
-		log.Fatal("JWT_SECRET is required (use -jwt-secret flag or JWT_SECRET env)")
+	if envDB := os.Getenv("DATABASE_URI"); envDB != "" {
+		cfg.DatabaseURI = envDB
 	}
+	if envAccrual := os.Getenv("ACCRUAL_SYSTEM_ADDRESS"); envAccrual != "" {
+		cfg.AccrualSystemAddr = envAccrual
+	}
+	if envJWT := os.Getenv("JWT_SECRET"); envJWT != "" {
+		cfg.JWTSecret = envJWT
+	}
+
+	log.Printf("Starting with config: Addr=%s, Accrual=%s", cfg.RunAddr, cfg.AccrualSystemAddr)
 
 	return cfg
-}
-
-func setDefaultsFromEnv(cfg *Config) {
-	if val := os.Getenv("RUN_ADDR"); val != "" && !isFlagPassed("a") {
-		cfg.RunAddr = val
-	}
-	if val := os.Getenv("DATABASE_URI"); val != "" && !isFlagPassed("d") {
-		cfg.DatabaseURI = val
-	}
-	if val := os.Getenv("ACCRUAL_SYSTEM_ADDRESS"); val != "" && !isFlagPassed("r") {
-		cfg.AccrualSystemAddr = val
-	}
-	if val := os.Getenv("JWT_SECRET"); val != "" && !isFlagPassed("jwt-secret") {
-		cfg.JWTSecret = val
-	}
-}
-
-func isFlagPassed(name string) bool {
-	found := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
 }
