@@ -51,7 +51,7 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 		Password  string `json:"password"`
 	}
 	if err := json.NewDecoder(rq.Body).Decode(&req); err != nil {
-		http.Error(rw, "Can`t parse JSON", http.StatusInternalServerError)
+		http.Error(rw, "Can`t parse JSON", http.StatusBadRequest)
 		return
 	}
 
@@ -91,7 +91,10 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"access_token": token})
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Authorization", "Bearer "+token)
+	rw.WriteHeader(http.StatusOK)
+	rw.Write([]byte("{}"))
 }
 
 // Login handler for existing users
@@ -121,7 +124,9 @@ func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"access_token": token})
+	rw.Header().Set("Authorization", "Bearer "+token)
+	rw.WriteHeader(http.StatusOK)
+	rw.Write([]byte("{}"))
 }
 
 func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
