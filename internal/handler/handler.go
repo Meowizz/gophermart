@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -68,17 +69,24 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Printf("BCRYPT ERROR: %v", err)
 		http.Error(rw, "error hashing password", http.StatusInternalServerError)
 		return
 	}
 
 	user, err := h.store.CreateUser(rq.Context(), req.LoginUser, string(hashPass))
 	if err != nil {
+		log.Printf("CREATE USER ERROR: %v", err)
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			http.Error(rw, "login already exists", http.StatusConflict)
+			return
+		}
 		http.Error(rw, "error creating user", http.StatusInternalServerError)
 		return
 	}
 	token, err := h.generateToken(user.Login)
 	if err != nil {
+		log.Printf("JWT ERROR: %v", err)
 		http.Error(rw, "error generating token", http.StatusInternalServerError)
 		return
 	}
