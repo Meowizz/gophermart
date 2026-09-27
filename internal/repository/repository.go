@@ -222,7 +222,11 @@ func (s *Store) ProcessOrderAccurual(ctx context.Context, orderNumber string, ac
 		return fmt.Errorf("udate order: %w", err)
 	}
 
-	queryUpdateBalances := `UPDATE balances SET current = current + $1 WHERE user_id = (SELECT user_id FROM orders WHERE number = $2)`
+	queryUpdateBalances := `
+		INSERT INTO balances (user_id, current, withdrawn)
+		SELECT user_id, $1, 0 FROM orders WHERE number = $2
+		ON CONFLICT (user_id) DO UPDATE SET current = balances.current + EXCLUDED.current
+	`
 	_, err = tx.Exec(ctx, queryUpdateBalances, accurual, orderNumber)
 	if err != nil {
 		return fmt.Errorf("udate balances: %w", err)
