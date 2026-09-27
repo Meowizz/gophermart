@@ -34,7 +34,7 @@ func main() {
 	defer database.CloseDB()
 
 	if cfg.AccrualSystemAddr != "" {
-		worker.StatusAccuralWorker(ctx, database.GetStore(), cfg.AccrualSystemAddr)
+		worker.StatusAccrualWorker(ctx, database.GetStore(), cfg.AccrualSystemAddr)
 	}
 
 	mux := http.NewServeMux()

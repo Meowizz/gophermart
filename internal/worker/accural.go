@@ -14,13 +14,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-type AccuralResponse struct {
+type AccurualResponse struct {
 	Order   string   `json:"order"`
 	Status  string   `json:"status"`
-	Accural *float64 `json:"accural,omitempty"`
+	Accrual *float64 `json:"accrual,omitempty"`
 }
 
-func StatusAccuralWorker(ctx context.Context, store *repository.Store, accuralURL string) {
+func StatusAccrualWorker(ctx context.Context, store *repository.Store, accurualURL string) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -29,20 +29,20 @@ func StatusAccuralWorker(ctx context.Context, store *repository.Store, accuralUR
 			Timeout: 10 * time.Second,
 		}
 
-		log.Println("Accural worker started")
+		log.Println("Accurual worker started")
 
 		for {
 			select {
 			case <-ctx.Done():
-				log.Println("Accural worker stopped")
+				log.Println("Accurual worker stopped")
 			case <-ticker.C:
-				processOrders(ctx, store, accuralURL, client)
+				processOrders(ctx, store, accurualURL, client)
 			}
 		}
 	}()
 }
 
-func processOrders(ctx context.Context, store *repository.Store, accuralURL string, client *http.Client) {
+func processOrders(ctx context.Context, store *repository.Store, accurualURL string, client *http.Client) {
 	orders, err := store.GetOrdersForProcessing(ctx, 10)
 
 	if err != nil {
@@ -54,7 +54,7 @@ func processOrders(ctx context.Context, store *repository.Store, accuralURL stri
 		if ctx.Err() != nil {
 			return
 		}
-		reqURL := fmt.Sprintf("%s/api/orders/%s", accuralURL, order.Number)
+		reqURL := fmt.Sprintf("%s/api/orders/%s", accurualURL, order.Number)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		if err != nil {
 			log.Printf("worker:failed to create request for %s: %v", order.Number, err)
@@ -85,23 +85,23 @@ func processOrders(ctx context.Context, store *repository.Store, accuralURL stri
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			var accuralResp AccuralResponse
-			if err := json.NewDecoder(resp.Body).Decode(&accuralResp); err != nil {
+			var accurualResp AccurualResponse
+			if err := json.NewDecoder(resp.Body).Decode(&accurualResp); err != nil {
 				log.Printf("worker: failed to decode response for %s: %v", order.Number, err)
 				resp.Body.Close()
 				continue
 			}
 			resp.Body.Close()
-			switch accuralResp.Status {
+			switch accurualResp.Status {
 			case "PROCESSED":
-				accuralValue := decimal.Zero
-				if accuralResp.Accural != nil {
-					accuralValue = decimal.NewFromFloat(*accuralResp.Accural)
+				accurualValue := decimal.Zero
+				if accurualResp.Accrual != nil {
+					accurualValue = decimal.NewFromFloat(*accurualResp.Accrual)
 				}
-				if err := store.ProcessOrderAccural(ctx, order.Number, accuralValue); err != nil {
+				if err := store.ProcessOrderAccurual(ctx, order.Number, accurualValue); err != nil {
 					log.Printf("worker: failed to process accrual for %s: %v", order.Number, err)
 				} else {
-					log.Printf("worker: successfully processed accrual for %s: %s", order.Number, accuralValue.String())
+					log.Printf("worker: successfully processed accrual for %s: %s", order.Number, accurualValue.String())
 				}
 			case "INVALID":
 				if err := store.UpdateOrderStatus(ctx, order.Number, "INVALID"); err != nil {

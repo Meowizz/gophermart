@@ -209,7 +209,7 @@ func (s *Store) UpdateOrderStatus(ctx context.Context, orderNumber, status strin
 	return nil
 }
 
-func (s *Store) ProcessOrderAccural(ctx context.Context, orderNumber string, accural decimal.Decimal) error {
+func (s *Store) ProcessOrderAccurual(ctx context.Context, orderNumber string, accurual decimal.Decimal) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -217,13 +217,13 @@ func (s *Store) ProcessOrderAccural(ctx context.Context, orderNumber string, acc
 	defer tx.Rollback(ctx)
 
 	queryUpdateOrder := `UPDATE orders SET status = 'PROCESSED', accrual = $1 WHERE number = $2`
-	_, err = tx.Exec(ctx, queryUpdateOrder, accural, orderNumber)
+	_, err = tx.Exec(ctx, queryUpdateOrder, accurual, orderNumber)
 	if err != nil {
 		return fmt.Errorf("udate order: %w", err)
 	}
 
 	queryUpdateBalances := `UPDATE balances SET current = current + $1 WHERE user_id = (SELECT user_id FROM orders WHERE number = $2)`
-	_, err = tx.Exec(ctx, queryUpdateBalances, accural, orderNumber)
+	_, err = tx.Exec(ctx, queryUpdateBalances, accurual, orderNumber)
 	if err != nil {
 		return fmt.Errorf("udate balances: %w", err)
 	}
