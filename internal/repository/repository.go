@@ -167,3 +167,65 @@ func (s *Store) GetWithdrawals(ctx context.Context, userID int) ([]models.Withdr
 	}
 	return withdrawals, nil
 }
+
+func (s *Store) GetOrdersForProcessing(ctx context.Context, limit int) ([]models.Order, error) {
+	query := `SELECT number, user_id, status, accrual, uploaded_at 
+		FROM orders 
+		WHERE status IN ('NEW', 'PROCESSING') 
+		ORDER BY uploaded_at ASC 
+		LIMIT $1`
+
+	rows, err := s.db.Query(ctx, query, limit)
+
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+
+	defer rows.Close()
+	var orders []models.Order
+
+	for rows.Next() {
+		var order models.Order
+		if err := rows.Scan(&order.Number, &order.UserID, &order.Status, &order.Accrual, &order.UploadedAt); err != nil {
+			return nil, fmt.Errorf("scan error:%w", err)
+		}
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+	return orders, nil
+}
+
+func (s *Store) UpdateOrderStatus(ctx context.Context, orderNumber, status string) error {
+	query := `UPDATE orders SET status = $1 WHERE number = $2`
+
+	_, err := s.db.Exec(ctx, query, status, orderNumber)
+	if err != nil {
+		return fmt.Errorf("update status error: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) ProcessOrderAccural(ctx context.Context, orderNumber string, accural decimal.Decimal) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	queryUpdateOrder := `UPDATE orders SET status = 'PROCESSED', accrual = $1 WHERE number = $2`
+	_, err = tx.Exec(ctx, queryUpdateOrder, accural, orderNumber)
+	if err != nil {
+		return fmt.Errorf("udate order: %w", err)
+	}
+
+	queryUpdateBalances := `UPDATE balances SET current = current + $1 WHERE user_id = (SELECT user_id FROM orders WHERE number = $2)`
+	_, err = tx.Exec(ctx, queryUpdateBalances, accural, orderNumber)
+	if err != nil {
+		return fmt.Errorf("udate balances: %w", err)
+	}
+	return tx.Commit(ctx)
+}

@@ -46,6 +46,7 @@ func (h *Handler) generateToken(login string) (string, error) {
 
 // Auth Handler for register new users
 func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
+	logger := middleware.GetLogger(rq.Context())
 	var req struct {
 		LoginUser string `json:"login"`
 		Password  string `json:"password"`
@@ -59,6 +60,7 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 	req.Password = strings.TrimSpace(req.Password)
 
 	if req.LoginUser == "" || req.Password == "" {
+		logger.Warn("empty login or password")
 		http.Error(rw, "login and password are required", http.StatusBadRequest)
 		return
 	}
@@ -69,14 +71,14 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		log.Printf("BCRYPT ERROR: %v", err)
+		logger.Error("BCRYPT ERROR: %v", err)
 		http.Error(rw, "error hashing password", http.StatusInternalServerError)
 		return
 	}
 
 	user, err := h.store.CreateUser(rq.Context(), req.LoginUser, string(hashPass))
 	if err != nil {
-		log.Printf("CREATE USER ERROR: %v", err)
+		logger.Error("create user error", "error", err, "login", req.LoginUser)
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
 			http.Error(rw, "login already exists", http.StatusConflict)
 			return
@@ -90,6 +92,7 @@ func (h *Handler) RegisterHandler(rw http.ResponseWriter, rq *http.Request) {
 		http.Error(rw, "error generating token", http.StatusInternalServerError)
 		return
 	}
+	logger.Info("user registered successfully", "user_id", user.ID, "login", user.Login)
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Authorization", "Bearer "+token)
@@ -130,15 +133,17 @@ func (h *Handler) LoginHandler(rw http.ResponseWriter, rq *http.Request) {
 }
 
 func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
-
+	logger := middleware.GetLogger(rq.Context())
 	userLogin, ok := middleware.GetUserLogin(rq)
 	if !ok {
+		logger.Warn("unauthorized order creation attempt")
 		http.Error(rw, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
 	if err != nil {
+		logger.Error("failed to get user", "error", err, "login", userLogin)
 		http.Error(rw, "failed to get user", http.StatusInternalServerError)
 		return
 	}
@@ -146,6 +151,7 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 	// Read the request body
 	body, err := io.ReadAll(rq.Body)
 	if err != nil {
+		logger.Error("failed to read request body", "error", err)
 		http.Error(rw, "failed to read request body", http.StatusBadRequest)
 		return
 	}
@@ -153,12 +159,14 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 
 	orderNumber := strings.TrimSpace(string(body))
 	if orderNumber == "" {
+		logger.Warn("empty order number provided")
 		http.Error(rw, "order number is empty", http.StatusBadRequest)
 		return
 	}
 
 	isValid, err := luhn.IsValid(orderNumber)
 	if err != nil || !isValid {
+		logger.Warn("invalid luhn order number", "order", orderNumber)
 		http.Error(rw, "invalid order number", http.StatusUnprocessableEntity)
 		return
 	}
@@ -166,9 +174,11 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 	existingOrder, err := h.store.GetOrderByNumber(rq.Context(), orderNumber)
 	if err == nil {
 		if existingOrder.UserID == user.ID {
+			logger.Info("order already exists for this user", "order", orderNumber)
 			rw.WriteHeader(http.StatusOK)
 			return
 		} else {
+			logger.Warn("order already uploaded by another user", "order", orderNumber, "user_id", user.ID)
 			http.Error(rw, "order already uploaded by another user", http.StatusConflict)
 			return
 		}
@@ -176,10 +186,11 @@ func (h *Handler) CreateOrder(rw http.ResponseWriter, rq *http.Request) {
 
 	err = h.store.CreateOrder(rq.Context(), user.ID, orderNumber)
 	if err != nil {
+		logger.Error("failed to create order in DB", "error", err, "order", orderNumber)
 		http.Error(rw, "failed to create order", http.StatusInternalServerError)
 		return
 	}
-
+	logger.Info("order created successfully", "order", orderNumber, "user_id", user.ID)
 	rw.WriteHeader(http.StatusAccepted)
 }
 

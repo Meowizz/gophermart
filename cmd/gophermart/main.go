@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,9 +14,15 @@ import (
 	"github.com/Meowizz/gophermart/internal/database"
 	"github.com/Meowizz/gophermart/internal/handler"
 	"github.com/Meowizz/gophermart/internal/middleware"
+	"github.com/Meowizz/gophermart/internal/worker"
 )
 
 func main() {
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	cfg := config.LoadConfig()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -25,6 +32,10 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
+
+	if cfg.AccrualSystemAddr != "" {
+		worker.StatusAccuralWorker(ctx, database.GetStore(), cfg.AccrualSystemAddr)
+	}
 
 	mux := http.NewServeMux()
 	h := handler.NewHandler(database.GetStore(), []byte(cfg.JWTSecret))

@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
@@ -58,6 +57,7 @@ func (h *Handler) GetBalance(rw http.ResponseWriter, rq *http.Request) {
 }
 
 func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
+	logger := middleware.GetLogger(rq.Context())
 	userLogin, ok := middleware.GetUserLogin(rq)
 	if !ok {
 		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
@@ -65,6 +65,7 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 	}
 	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
 	if err != nil {
+		logger.Error("failed to get user", "error", err)
 		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -75,20 +76,24 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 	}
 
 	if req.Order == "" {
+		logger.Warn("withdrawal attempt with empty order number")
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
 	}
 	if req.Sum.LessThanOrEqual(decimal.Zero) {
+		logger.Warn("withdrawal attempt with invalid sum", "sum", req.Sum)
 		http.Error(rw, "Invalid sum", http.StatusUnprocessableEntity)
 		return
 	}
 	order, err := h.store.GetOrderByNumber(rq.Context(), req.Order)
 	if err != nil || order.UserID != user.ID {
+		logger.Warn("withdrawal attempt for invalid or foreign order", "order", req.Order, "user_id", user.ID)
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
 	}
 
 	if order.Status != "PROCESSED" {
+		logger.Warn("withdrawal attempt for non-processed order", "order", req.Order, "status", order.Status)
 		http.Error(rw, "order is not processed yet", http.StatusUnprocessableEntity)
 		return
 	}
@@ -96,13 +101,15 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 	err = h.store.WithdrawBalance(rq.Context(), user.ID, req.Sum, req.Order)
 	if err != nil {
 		if errors.Is(err, repository.ErrInsufficientFunds) {
+			logger.Warn("insufficient funds for withdrawal", "user_id", user.ID, "requested", req.Sum)
 			http.Error(rw, "Insufficient funds", http.StatusPaymentRequired)
 		} else {
-			log.Printf("Withdraw error : %v", err)
+			logger.Error("withdrawal transaction failed", "error", err, "user_id", user.ID)
 			http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
 		}
 		return
 	}
+	logger.Info("withdrawal successful", "user_id", user.ID, "order", req.Order, "sum", req.Sum)
 	rw.WriteHeader(http.StatusOK)
 }
 
