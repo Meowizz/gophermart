@@ -21,10 +21,10 @@ type Order struct {
 }
 
 type OrderResponse struct {
-	Number     string           `json:"number"`
-	Status     string           `json:"status"`
-	Accrual    *decimal.Decimal `json:"accrual,omitempty"`
-	UploadedAt string           `json:"uploaded_at"`
+	Number     string   `json:"number"`
+	Status     string   `json:"status"`
+	Accrual    *float64 `json:"accrual,omitempty"`
+	UploadedAt string   `json:"uploaded_at"`
 }
 
 type Balance struct {
