@@ -14,8 +14,8 @@ func ConvertOrderToResponse(order models.Order) models.OrderResponse {
 		UploadedAt: order.UploadedAt.Format(time.RFC3339),
 	}
 	if order.Accrual.GreaterThan(decimal.Zero) {
-		accrual := order.Accrual
-		resp.Accrual = &accrual
+		accrualFloat, _ := order.Accrual.Float64()
+		resp.Accrual = &accrualFloat
 	}
 	return resp
 }
