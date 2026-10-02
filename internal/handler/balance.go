@@ -1,0 +1,151 @@
+package handler
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"time"
+
+	luhn "github.com/EClaesson/go-luhn"
+	"github.com/Meowizz/gophermart/internal/middleware"
+	"github.com/Meowizz/gophermart/internal/repository"
+	"github.com/shopspring/decimal"
+)
+
+type BalanceResponse struct {
+	Current   float64 `json:"current"`
+	Withdrawn float64 `json:"withdrawn"`
+}
+
+type WithdrawalRequest struct {
+	Order string          `json:"order"`
+	Sum   decimal.Decimal `json:"sum"`
+}
+
+type WithdrawalResponse struct {
+	Order       string  `json:"order"`
+	Sum         float64 `json:"sum"`
+	ProcessedAt string  `json:"processed_at"`
+}
+
+func (h *Handler) GetBalance(rw http.ResponseWriter, rq *http.Request) {
+	userLogin, ok := middleware.GetUserLogin(rq)
+	if !ok {
+		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
+	if err != nil {
+		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	balance, err := h.store.GetBalance(rq.Context(), user.ID)
+	if err != nil {
+		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	current, _ := balance.Current.Float64()
+	withdrawn, _ := balance.Withdrawn.Float64()
+
+	resp := BalanceResponse{
+		Current:   current,
+		Withdrawn: withdrawn,
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(resp)
+}
+
+func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
+	logger := middleware.GetLogger(rq.Context())
+	userLogin, ok := middleware.GetUserLogin(rq)
+	if !ok {
+		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
+	if err != nil {
+		logger.Error("failed to get user", "error", err)
+		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	var req struct {
+		Order string  `json:"order"`
+		Sum   float64 `json:"sum"`
+	}
+
+	if err := json.NewDecoder(rq.Body).Decode(&req); err != nil {
+		logger.Error("invalid JSON in withdrawal request", "error", err)
+		http.Error(rw, "Invalid Request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Order == "" {
+		logger.Warn("withdrawal attempt with empty order number")
+		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
+		return
+	}
+
+	reqSum := decimal.NewFromFloat(req.Sum)
+	if reqSum.LessThanOrEqual(decimal.Zero) {
+		logger.Warn("withdrawal attempt with invalid sum", "sum", req.Sum)
+		http.Error(rw, "Invalid sum", http.StatusUnprocessableEntity)
+		return
+	}
+
+	isValid, err := luhn.IsValid(req.Order)
+	if err != nil || !isValid {
+		logger.Warn("withdrawal attempt with invalid luhn order", "order", req.Order)
+		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
+		return
+	}
+
+	err = h.store.WithdrawBalance(rq.Context(), user.ID, reqSum, req.Order)
+	if err != nil {
+		if errors.Is(err, repository.ErrInsufficientFunds) {
+			logger.Warn("insufficient funds for withdrawal", "user_id", user.ID, "requested", req.Sum)
+			http.Error(rw, "Insufficient funds", http.StatusPaymentRequired)
+		} else {
+			logger.Error("withdrawal transaction failed", "error", err, "user_id", user.ID)
+			http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
+		}
+		return
+	}
+	logger.Info("withdrawal successful", "user_id", user.ID, "order", req.Order, "sum", req.Sum)
+	rw.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) GetWithdrawals(rw http.ResponseWriter, rq *http.Request) {
+	userLogin, ok := middleware.GetUserLogin(rq)
+	if !ok {
+		http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	user, err := h.store.GetUserByLogin(rq.Context(), userLogin)
+	if err != nil {
+		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	withdrawals, err := h.store.GetWithdrawals(rq.Context(), user.ID)
+	if err != nil {
+		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	if len(withdrawals) == 0 {
+		rw.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	resp := make([]WithdrawalResponse, len(withdrawals))
+	for i, w := range withdrawals {
+		sum, _ := w.Sum.Float64()
+		resp[i] = WithdrawalResponse{
+			Order:       w.OrderNumber,
+			Sum:         sum,
+			ProcessedAt: w.ProcessedAt.Format(time.RFC3339),
+		}
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(resp)
+}
