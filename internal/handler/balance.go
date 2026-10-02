@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	luhn "github.com/EClaesson/go-luhn"
 	"github.com/Meowizz/gophermart/internal/middleware"
 	"github.com/Meowizz/gophermart/internal/repository"
 	"github.com/shopspring/decimal"
@@ -80,18 +81,18 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	reqSum := decimal.NewFromFloat(req.Sum)
-
 	if req.Order == "" {
 		logger.Warn("withdrawal attempt with empty order number")
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
 	}
+
+	reqSum := decimal.NewFromFloat(req.Sum)
 	if reqSum.LessThanOrEqual(decimal.Zero) {
+		logger.Warn("withdrawal attempt with invalid sum", "sum", req.Sum)
 		http.Error(rw, "Invalid sum", http.StatusUnprocessableEntity)
 		return
 	}
-	order, err := h.store.GetOrderByNumber(rq.Context(), req.Order)
 
 	if err != nil {
 		logger.Warn("order not found in DB", "order", req.Order, "error", err)
@@ -99,14 +100,10 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	if order.UserID != user.ID {
-		logger.Warn("order belongs to another user", "order_user_id", order.UserID, "request_user_id", user.ID)
-		http.Error(rw, "invalid order number", http.StatusUnprocessableEntity)
-	}
-
-	if order.Status != "PROCESSED" {
-		logger.Warn("withdrawal attempt for non-processed order", "order", req.Order, "status", order.Status)
-		http.Error(rw, "order is not processed yet", http.StatusUnprocessableEntity)
+	isValid, err := luhn.IsValid(req.Order)
+	if err != nil || !isValid {
+		logger.Warn("withdrawal attempt with invalid luhn order", "order", req.Order)
+		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
 	}
 
