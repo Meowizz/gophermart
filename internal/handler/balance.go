@@ -92,10 +92,16 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 	order, err := h.store.GetOrderByNumber(rq.Context(), req.Order)
-	if err != nil || order.UserID != user.ID {
-		logger.Warn("withdrawal attempt for invalid or foreign order", "order", req.Order, "user_id", user.ID)
+
+	if err != nil {
+		logger.Warn("order not found in DB", "order", req.Order, "error", err)
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
+	}
+
+	if order.UserID != user.ID {
+		logger.Warn("order belongs to another user", "order_user_id", order.UserID, "request_user_id", user.ID)
+		http.Error(rw, "invalid order number", http.StatusUnprocessableEntity)
 	}
 
 	if order.Status != "PROCESSED" {
