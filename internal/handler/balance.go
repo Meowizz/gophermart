@@ -69,19 +69,25 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 		http.Error(rw, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	var req WithdrawalRequest
+	var req struct {
+		Order string  `json:"order"`
+		Sum   float64 `json:"sum"`
+	}
+
 	if err := json.NewDecoder(rq.Body).Decode(&req); err != nil {
+		logger.Error("invalid JSON in withdrawal request", "error", err)
 		http.Error(rw, "Invalid Request", http.StatusBadRequest)
 		return
 	}
+
+	reqSum := decimal.NewFromFloat(req.Sum)
 
 	if req.Order == "" {
 		logger.Warn("withdrawal attempt with empty order number")
 		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
 		return
 	}
-	if req.Sum.LessThanOrEqual(decimal.Zero) {
-		logger.Warn("withdrawal attempt with invalid sum", "sum", req.Sum)
+	if reqSum.LessThanOrEqual(decimal.Zero) {
 		http.Error(rw, "Invalid sum", http.StatusUnprocessableEntity)
 		return
 	}
@@ -98,7 +104,7 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	err = h.store.WithdrawBalance(rq.Context(), user.ID, req.Sum, req.Order)
+	err = h.store.WithdrawBalance(rq.Context(), user.ID, reqSum, req.Order)
 	if err != nil {
 		if errors.Is(err, repository.ErrInsufficientFunds) {
 			logger.Warn("insufficient funds for withdrawal", "user_id", user.ID, "requested", req.Sum)
