@@ -94,12 +94,6 @@ func (h *Handler) WithdrawBalance(rw http.ResponseWriter, rq *http.Request) {
 		return
 	}
 
-	if err != nil {
-		logger.Warn("order not found in DB", "order", req.Order, "error", err)
-		http.Error(rw, "Invalid order number", http.StatusUnprocessableEntity)
-		return
-	}
-
 	isValid, err := luhn.IsValid(req.Order)
 	if err != nil || !isValid {
 		logger.Warn("withdrawal attempt with invalid luhn order", "order", req.Order)
